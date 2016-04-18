@@ -1,5 +1,13 @@
 // Tsp.h
 
+#include <stdlib.h>
+#include <shmem.h>
+#include <shmemx.h>
+#include <stdio.h>
+#include <memory.h>
+
+
+
 const unsigned int MAXCITIES = 25;
 
 class Path {
@@ -20,8 +28,10 @@ class Path {
 
 /////////////////////////// Messages stuff ///////////////////////////////
 
-enum {PUT_PATH_TAG, BEST_PATH_TAG, GET_PATH_TAG, UPDATE_BEST_PATH_TAG, 
-      DONE_TAG, REPLY_PATH_TAG};
+enum {hid_BESTPATH=100, hid_SUBSCRIBE, hid_PUTPATH};
+
+//enum {PUT_PATH_TAG, BEST_PATH_TAG, GET_PATH_TAG, UPDATE_BEST_PATH_TAG, 
+//      DONE_TAG, REPLY_PATH_TAG};
 
 // This is the payload of PUT_PATH_TAG, GOOD_PATH_TAG, 
 // and REPLY_PATH_TAG messages
@@ -32,9 +42,10 @@ struct Msg_t {
 };
 
 const unsigned int MSGSIZE = sizeof(Msg_t)/sizeof(int);
+void Master();
+void Worker();
 
-// See function coord()
-
+const unsigned int INTMAX = 32767;
 
 
 

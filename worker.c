@@ -1,100 +1,71 @@
-
-volatile  int shortestLength, newshortestlen, isnewpath;
-
-void handler_worker_done()
-{
-	// TODO use a handler safe lock around this
-	//isdone = 1;
-}
-
-void handler_worker_update_bestpath()
-{
-	// TODO use a handler safe lock around this
-        newshortestlen = msg.length;
-}
+#include <shmem.h>
+#include "list.h"
+#include "tsp.h"
 
 
-void handler_worker_newpath()
-{
-    	msg.visited++;
-    	shortestLength = newshortestlen;
-
-    	if (msg.visited==NumCities) {
-    	  int d1 = Dist[ (msg.city[NumCities-2])*NumCities + msg.city[NumCities-1] ];
-    	  int d2 = Dist[(msg.city[NumCities-1]) * NumCities ];
-    	  if (d1 * d2)   { 
-    	     // both edges exist 
-    	     msg.length += d1 + d2;
-    	  
-    	     // if path is good, send it to master
-    	     if (msg.length < shortestLength) {
-    	        //MPI_Send (&msg, MSGSIZE, MPI_INT, 0, BEST_PATH_TAG, MPI_COMM_WORLD);
-    	        shmem_am_request(COORD_PE, msg, MSGSIZE*sizeof(int), hid_BESTPATH);
-    	     }
-    	  }
-    	  // not a valid path, ask for another partial path
-    	}
-	else {
-	  // TODO use a handler safe lock around this
-          isnewpath = 1;
-	}
-}
-
-
-//TODO put a handler safe lock for every use of this //macro
-#define IS_DONE   \
-      if (isdone) { \
-         printf("Worker %d received DONE_TAG ..\n", myrank); \
-         break; \
-      }
-
+#define MASTER_PE 1
+extern Msg_t msg_in;
+extern int *Dist;
+extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, nwait, NumCities;
 
 void Worker ()
 { 
-  MPI_Status status;
-  Msg_t msg;
-  newshortestlen = INT_MAX;
+  newshortestlen = INTMAX;
   isdone = 0; isnewpath = 0;
   
   shmem_barrier_all();
   printf("Worker started ...\n"); fflush(stdout);
 
-  MPI_Send (NULL, 0, MPI_INT, 0, GET_PATH_TAG, MPI_COMM_WORLD);
-
   while (1) {
-    //MPI_Recv (&msg, MSGSIZE, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-    shmemx_am_poll();
 
-    IS_DONE;
+    shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
+    shmemx_am_quiet();
 
-    if (isnewpath) { 
+    if (shmem_int_swap(&isnewpath,0,mype)) 
+    { 
 
+    	msg_in.visited++;
+
+    	if (msg_in.visited==NumCities) {
+    	  int d1 = Dist[(msg_in.city[NumCities-2])*NumCities + msg_in.city[NumCities-1]];
+    	  int d2 = Dist[(msg_in.city[NumCities-1]) * NumCities ];
+
+    	  if (d1 * d2)   { 
+    	     // both edges exist 
+    	     msg_in.length += d1 + d2;
+    	  
+    	     // if path is good, send it to master
+    	     if (msg_in.length < newshortestlen) 
+    	        shmemx_am_request(MASTER_PE, hid_BESTPATH, &msg_in, sizeof(Msg_t));
+    	  }
+    	  // not a valid path, ask for another partial path
+    	}
+	else {
     	  // For each city not yet visited, extend the path:
-    	  // (use of same msg space to compute every extended the path)
-    	  int length = msg.length;
-    	  for (int i=msg.visited-1; i<NumCities; i++) {
+    	  // (use of symmetric buffer msg_in to compute every extended path)
+    	  int length = msg_in.length;
+    	  for (int i=msg_in.visited-1; i<NumCities; i++) {
     	    // swap city[i] and city[visted-1]
-    	    if (i > msg.visited-1) {
-    	       int tmp = msg.city[msg.visited-1];
-    	       msg.city[msg.visited-1] = msg.city[i];
-    	       msg.city[i] = tmp;
+    	    if (i > msg_in.visited-1) {
+    	       int tmp = msg_in.city[msg_in.visited-1];
+    	       msg_in.city[msg_in.visited-1] = msg_in.city[i];
+    	       msg_in.city[i] = tmp;
     	    }
     	  
     	    // visit city[visited-1]
-    	    if (int d = Dist[(msg.city[msg.visited-2])*NumCities + msg.city[msg.visited-1] ]) {
-    	        msg.length = length + d;
-    	        if (msg.length < shortestLength) {
-    	          //MPI_Send (&msg, MSGSIZE, MPI_INT, 0, PUT_PATH_TAG, MPI_COMM_WORLD);
-    	          shmem_am_request(COORD_PE, msg, MSGSIZE*sizeof(int), hid_PUTPATH);
-    	        }
+    	    if (int d = Dist[(msg_in.city[msg_in.visited-2])*NumCities + msg_in.city[msg_in.visited-1] ]) {
+    	        msg_in.length = length + d;
+    	        if (msg_in.length < newshortestlen) 
+    	          shmemx_am_request(MASTER_PE, hid_PUTPATH, &msg_in, sizeof(Msg_t));
     	    }
     	  }
         }
-
-        IS_DONE;
-        isnewpath=0;
-        //MPI_Send (NULL, 0, MPI_INT, 0, GET_PATH_TAG, MPI_COMM_WORLD);
-        shmem_am_request(COORD_PE, NULL, 0, hid_GETPATH);
     }
+
+    if (shmem_int_swap(&isdone,0,mype)) { 
+       printf("Worker %d received DONE_TAG ..\n", mype); 
+       break; 
+    }
+  }
 }
 
