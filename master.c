@@ -17,9 +17,11 @@ handler_master_subscribe(void *temp, size_t nbytes, int req_pe, shmemx_am_token_
 	shmemx_am_mutex_lock(&lock_workers_stack);
 	*(waiting+nwait) = req_pe;
 	nwait++;
-	printf("Master: Worker %d added to work queue\n",req_pe);
-	fflush(stdout);
+	//printf("AM: worker queue locked\n");
+	//fflush(stdout);
 	shmemx_am_mutex_unlock(&lock_workers_stack);
+	//printf("AM: Worker %d added to work queue\n",req_pe);
+	//fflush(stdout);
 }
 
 
@@ -30,10 +32,12 @@ handler_master_putpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_token
 	Path* P = new Path();
 	P->Set (msg_buf->length, msg_buf->city, msg_buf->visited);
 	shmemx_am_mutex_lock(&lock_queue);
+	//printf("AM: mutex queue locked\n");
+	//fflush(stdout);
 	queue.Insert(P, msg_buf->length);
 	shmemx_am_mutex_unlock(&lock_queue);
-	printf("Master: Received new path from Worker %d\n",req_pe);
-	fflush(stdout);
+	//printf("AM: Received new path from Worker %d\n",req_pe);
+	//fflush(stdout);
 }
 
 
@@ -46,12 +50,12 @@ handler_master_bestpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_toke
 	if (msg_buf->length < Shortest.length)
 	{
            bpath ++;
-           printf("Got best path %d, source = %d, length = %d\n", 
+           printf("Master: Got best path %d, source = %d, length = %d\n", 
                 bpath, req_pe, msg_buf->length);
            fflush(stdout);
            Shortest.Set (msg_buf->length, msg_buf->city, NumCities);
 	   newshortestlen = msg_buf->length;
-	   shmem_int_swap(&isshortest,1,mype);
+	   shmem_int_swap(&isshortest,1,mype); // communication with self is allowed within AM handler
         }
 	shmemx_am_mutex_unlock(&lock_shortestlen);
 }	
@@ -76,12 +80,12 @@ announce_done()
 inline int 
 assign_task()
 {
+	int retval = 0;
 	Path* P;
 	Msg_t* msg_buf = new Msg_t;
 	shmemx_am_mutex_lock(&lock_workers_stack);
-	int temp_nwait = nwait;
-	shmemx_am_mutex_unlock(&lock_workers_stack);
-	if(temp_nwait>0) {
+	if(nwait>0) {
+           shmemx_am_mutex_unlock(&lock_workers_stack);
            shmemx_am_mutex_lock(&lock_queue);
            if(!queue.IsEmpty()) {
               // get a path and send it along with bestlength
@@ -99,15 +103,20 @@ assign_task()
 	      shmem_quiet();
 	      shmem_int_swap(&isnewpath,1,dest_pe);
 	      shmem_quiet();
-	      printf("Master: assigned new task to Worker %d\n",dest_pe);
-	      fflush(stdout);
-	      return 0;
-           }else if(temp_nwait == NumProcs-1) {
+           } else {
               shmemx_am_mutex_unlock(&lock_queue);
-              announce_done();
-              return 1;
+	      shmemx_am_mutex_lock(&lock_workers_stack);
+	      if(nwait == NumProcs-1) {
+                shmemx_am_mutex_unlock(&lock_workers_stack);
+                announce_done();
+                retval = 1;
+	      } else
+                shmemx_am_mutex_unlock(&lock_workers_stack);
 	   }
-	}
+	} else
+           shmemx_am_mutex_unlock(&lock_workers_stack);
+
+	return retval;
 }
 
 

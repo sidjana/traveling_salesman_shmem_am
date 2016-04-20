@@ -1,6 +1,6 @@
 
 
-CFLAGS =  -g
+CFLAGS =  -O2
 OSHCPP = oshc++ 
 
 .PHONY: clean run build all default
@@ -12,7 +12,7 @@ build all default: list.c tsp.c tsp.h list.h master.c worker.c
 	$(OSHCPP) $(CFLAGS) $^ -o ./tsp.out;
 
 run:
-	srun -n 4 ./tsp.out
+	srun -n 16 ./tsp.out
 
 
 clean:

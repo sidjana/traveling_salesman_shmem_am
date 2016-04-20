@@ -26,20 +26,19 @@ void Worker ()
   shmemx_am_quiet();
   while (1) {
 
-    while (shmem_int_swap(&isnewpath,0,mype)) 
-    { 
-	printf("Worker %d just received new path\n",mype);
-	fflush(stdout);
+    if (shmem_int_swap(&isnewpath,0,mype)) { 
+	//printf("Worker %d just received new path\n",mype);
+	//fflush(stdout);
 
     	msg_in.visited++;
 
     	if (msg_in.visited==NumCities) {
-	  printf("Worker %d checking for short distance\n",mype);
-	  fflush(stdout);
+	  //printf("Worker %d checking for short distance\n",mype);
+	  //fflush(stdout);
     	  int d1 = Dist[(msg_in.city[NumCities-2])*NumCities + msg_in.city[NumCities-1]];
     	  int d2 = Dist[(msg_in.city[NumCities-1]) * NumCities ];
 
-    	  if (d1 * d2)   { 
+    	  if (d1 * d2) { 
     	     // both edges exist 
     	     msg_in.length += d1 + d2;
     	  
@@ -50,8 +49,9 @@ void Worker ()
     	  // not a valid path, ask for another partial path
     	}
 	else {
-	  printf("Worker %d evaluating path\n",mype);
-	  fflush(stdout);
+	  //printf("Worker %d evaluating path\n",mype);
+	  //fflush(stdout);
+
     	  // For each city not yet visited, extend the path:
     	  // (use of symmetric buffer msg_in to compute every extended path)
     	  int length = msg_in.length;
@@ -72,10 +72,10 @@ void Worker ()
     	    }
     	  }
         }
-        printf("Worker %d subscribing\n",mype);
-        fflush(stdout);
+        //printf("Worker %d subscribing\n",mype);
+        //fflush(stdout);
         shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, &temp_buf, sizeof(int));
-        shmemx_am_quiet();
+	shmemx_am_quiet();
     } /* end of new path check */
 
     if (shmem_int_swap(&isdone,0,mype)) { 
