@@ -26,8 +26,12 @@
 #include "master.h"
 
 // Symmetric Vars
-int *waiting, *Dist; // to save peIds
-int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, nwait, NumCities;
+#define DIST_MAX_SIZE 500
+int *waiting;
+int Dist[DIST_MAX_SIZE]; 
+int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, NumCities;
+shmemx_am_mutex lock_shortestlen, lock_queue, lock_workers_stack;
+volatile int nwait;
 long pSync[_SHMEM_BCAST_SYNC_SIZE];
 Msg_t msg_in;
 
@@ -73,8 +77,8 @@ void Fill_Dist( void )
   shmem_barrier_all();
   shmem_broadcast32(&NumCities, &NumCities, 1, 0, 0, 0, NumProcs, pSync);
   assert(NumCities<=MAXCITIES);
-
-  Dist = new int[NumCities*NumCities];
+  if(NumCities*NumCities > DIST_MAX_SIZE)
+	  fprintf(stderr, "Increase size of Dist array\n");
 
   if (mype == 0)
      for( int i = 0 ; i<NumCities ; i++ )
@@ -105,6 +109,9 @@ int main(int argc, char *argv[])
   shmemx_am_attach(hid_BESTPATH, &handler_master_bestpath);
   shmemx_am_attach(hid_SUBSCRIBE, &handler_master_subscribe);
   shmemx_am_attach(hid_PUTPATH, &handler_master_putpath);
+  shmemx_am_mutex_init(&lock_shortestlen);
+  shmemx_am_mutex_init(&lock_queue);
+  shmemx_am_mutex_init(&lock_workers_stack);
 
   if (NumProcs<2) {
     printf("At least 2 processes are required\n");
@@ -121,9 +128,10 @@ int main(int argc, char *argv[])
   else
     Worker();
   
-  shmemx_am_detach(hid_BESTPATH);
-  shmemx_am_detach(hid_SUBSCRIBE);
-  shmemx_am_detach(hid_PUTPATH);
+  //TODO
+//  shmemx_am_detach(hid_BESTPATH);
+//  shmemx_am_detach(hid_SUBSCRIBE);
+//  shmemx_am_detach(hid_PUTPATH);
   shmem_finalize();
   return 0;
 }

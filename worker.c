@@ -3,10 +3,12 @@
 #include "tsp.h"
 
 
-#define MASTER_PE 1
+#define MASTER_PE 0
 extern Msg_t msg_in;
-extern int *Dist;
-extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, nwait, NumCities;
+extern int Dist[];
+extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, NumCities;
+extern volatile int nwait;
+int temp_buf;
 
 void Worker ()
 { 
@@ -14,19 +16,26 @@ void Worker ()
   isdone = 0; isnewpath = 0;
   
   shmem_barrier_all();
-  printf("Worker started ...\n"); fflush(stdout);
 
+
+  //TODO fix shmem implementation to allow null pointers and empty buffers to be passed
+  // as active messages
+  printf("Worker %d subscribing\n",mype);
+  fflush(stdout);
+  shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, &temp_buf, sizeof(int));
+  shmemx_am_quiet();
   while (1) {
 
-    shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
-    shmemx_am_quiet();
-
-    if (shmem_int_swap(&isnewpath,0,mype)) 
+    while (shmem_int_swap(&isnewpath,0,mype)) 
     { 
+	printf("Worker %d just received new path\n",mype);
+	fflush(stdout);
 
     	msg_in.visited++;
 
     	if (msg_in.visited==NumCities) {
+	  printf("Worker %d checking for short distance\n",mype);
+	  fflush(stdout);
     	  int d1 = Dist[(msg_in.city[NumCities-2])*NumCities + msg_in.city[NumCities-1]];
     	  int d2 = Dist[(msg_in.city[NumCities-1]) * NumCities ];
 
@@ -41,6 +50,8 @@ void Worker ()
     	  // not a valid path, ask for another partial path
     	}
 	else {
+	  printf("Worker %d evaluating path\n",mype);
+	  fflush(stdout);
     	  // For each city not yet visited, extend the path:
     	  // (use of symmetric buffer msg_in to compute every extended path)
     	  int length = msg_in.length;
@@ -53,19 +64,26 @@ void Worker ()
     	    }
     	  
     	    // visit city[visited-1]
-    	    if (int d = Dist[(msg_in.city[msg_in.visited-2])*NumCities + msg_in.city[msg_in.visited-1] ]) {
+    	    if (int d = Dist[(msg_in.city[msg_in.visited-2])*NumCities +
+			      msg_in.city[msg_in.visited-1] ]) {
     	        msg_in.length = length + d;
     	        if (msg_in.length < newshortestlen) 
     	          shmemx_am_request(MASTER_PE, hid_PUTPATH, &msg_in, sizeof(Msg_t));
     	    }
     	  }
         }
-    }
+        printf("Worker %d subscribing\n",mype);
+        fflush(stdout);
+        shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, &temp_buf, sizeof(int));
+        shmemx_am_quiet();
+    } /* end of new path check */
 
     if (shmem_int_swap(&isdone,0,mype)) { 
-       printf("Worker %d received DONE_TAG ..\n", mype); 
-       break; 
+        printf("Worker %d received DONE_TAG ..\n", mype); 
+        break; 
     }
-  }
-}
 
+  } /* end of while(1) */
+  shmem_barrier_all();
+
+}

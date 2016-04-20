@@ -1,12 +1,11 @@
 #include "list.h"
 #include "tsp.h"
 
-long lock_shortestlen = 0;
-long lock_queue = 0;
-long lock_workers_stack = 0;
 extern int* waiting;     // to save peids
 extern Msg_t msg_in;
-extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, nwait, NumCities;
+extern shmemx_am_mutex lock_shortestlen, lock_queue, lock_workers_stack;
+extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, NumCities;
+extern volatile int nwait;
 
 Path Shortest;
 LIST queue;
@@ -15,9 +14,12 @@ LIST queue;
 void 
 handler_master_subscribe(void *temp, size_t nbytes, int req_pe, shmemx_am_token_t token)
 {
-	shmem_set_lock(&lock_workers_stack);
-	waiting[nwait++] = req_pe;
-	shmem_clear_lock(&lock_workers_stack);
+	shmemx_am_mutex_lock(&lock_workers_stack);
+	*(waiting+nwait) = req_pe;
+	nwait++;
+	printf("Master: Worker %d added to work queue\n",req_pe);
+	fflush(stdout);
+	shmemx_am_mutex_unlock(&lock_workers_stack);
 }
 
 
@@ -27,9 +29,11 @@ handler_master_putpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_token
 	Msg_t* msg_buf = (Msg_t*) msg_new;
 	Path* P = new Path();
 	P->Set (msg_buf->length, msg_buf->city, msg_buf->visited);
-	shmem_set_lock(&lock_queue);
+	shmemx_am_mutex_lock(&lock_queue);
 	queue.Insert(P, msg_buf->length);
-	shmem_clear_lock(&lock_queue);
+	shmemx_am_mutex_unlock(&lock_queue);
+	printf("Master: Received new path from Worker %d\n",req_pe);
+	fflush(stdout);
 }
 
 
@@ -38,7 +42,7 @@ handler_master_bestpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_toke
 {
 	static int bpath=0;
 	Msg_t* msg_buf = (Msg_t*)(msg_new);
-	shmem_set_lock(&lock_shortestlen);
+	shmemx_am_mutex_lock(&lock_shortestlen);
 	if (msg_buf->length < Shortest.length)
 	{
            bpath ++;
@@ -49,7 +53,7 @@ handler_master_bestpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_toke
 	   newshortestlen = msg_buf->length;
 	   shmem_int_swap(&isshortest,1,mype);
         }
-	shmem_clear_lock(&lock_shortestlen);
+	shmemx_am_mutex_unlock(&lock_shortestlen);
 }	
 
 
@@ -74,25 +78,32 @@ assign_task()
 {
 	Path* P;
 	Msg_t* msg_buf = new Msg_t;
-	if(nwait>0) {
-           shmem_set_lock(&lock_queue);
+	shmemx_am_mutex_lock(&lock_workers_stack);
+	int temp_nwait = nwait;
+	shmemx_am_mutex_unlock(&lock_workers_stack);
+	if(temp_nwait>0) {
+           shmemx_am_mutex_lock(&lock_queue);
            if(!queue.IsEmpty()) {
               // get a path and send it along with bestlength
               P = (Path *)queue.Remove(NULL); 
-              shmem_clear_lock(&lock_queue);
+              shmemx_am_mutex_unlock(&lock_queue);
               msg_buf->length = P->length;
               memcpy (msg_buf->city, P->city, MAXCITIES*sizeof(int));
               msg_buf->visited = P->visited;
               delete P;
-	      shmem_set_lock(&lock_workers_stack);
-	      int dest_pe = waiting[--nwait];
-	      shmem_clear_lock(&lock_workers_stack);
+	      shmemx_am_mutex_lock(&lock_workers_stack);
+	      --nwait;
+	      int dest_pe = *(waiting+nwait);
+	      shmemx_am_mutex_unlock(&lock_workers_stack);
 	      shmem_putmem(&msg_in, msg_buf, sizeof(Msg_t), dest_pe);
-	      shmem_int_swap(&isnewpath,0,dest_pe);
 	      shmem_quiet();
+	      shmem_int_swap(&isnewpath,1,dest_pe);
+	      shmem_quiet();
+	      printf("Master: assigned new task to Worker %d\n",dest_pe);
+	      fflush(stdout);
 	      return 0;
-           }else if(nwait == NumProcs-1) {
-              shmem_clear_lock(&lock_queue);
+           }else if(temp_nwait == NumProcs-1) {
+              shmemx_am_mutex_unlock(&lock_queue);
               announce_done();
               return 1;
 	   }
@@ -103,8 +114,8 @@ assign_task()
 void Master ()
 {
   // To keep track of processes that are waiting for a Path
-  waiting = new int[NumProcs]; // worker stack
-  nwait = NumProcs-1;          // 1 master and the rest are workers
+  waiting = (int*) malloc(NumProcs*sizeof(int)); // worker stack
+  nwait = 0;          // 1 master and the rest are workers
   Path* P = new Path;
   queue.Insert(P, 0);	       // initialize queue with the first task
                                // one zero-length path
@@ -120,6 +131,7 @@ void Master ()
     if(assign_task())
        break;
   }
+  shmem_barrier_all();
   printf("Shortest path:\n");
   Shortest.Print();
 }
