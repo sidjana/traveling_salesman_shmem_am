@@ -34,6 +34,7 @@ shmemx_am_mutex lock_shortestlen, lock_queue, lock_workers_stack;
 volatile int nwait;
 long pSync[_SHMEM_BCAST_SYNC_SIZE];
 Msg_t msg_in;
+char* input_file;
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -65,38 +66,36 @@ void Path::Print()
 void Fill_Dist( void )
 {
 
-  // TODO Self initialize input data from a file
-  // and not the standard input (as is done now)
-  if (mype == 0)   
-     scanf("%d", &NumCities);
+  FILE* inptr = fopen(input_file, "r");
 
-  // global operation, all processes must call it
+  if (mype == 0) { 
+     fscanf(inptr,"%d", &NumCities);
+     printf("Number of cities: %d\n", NumCities);
+     for( int i = 0 ; i<NumCities ; i++ ) {
+        for( int j = 0 ; j<NumCities ; j++ ) {
+           fscanf(inptr,"%d", &Dist[i*NumCities + j]);
+           printf("%5d", Dist[i*NumCities+j] );
+	}
+        printf("\n");
+     }
+  }
+
+  
+  // Defining pSnyc array for collective operations
   for (int i=0; i < _SHMEM_BCAST_SYNC_SIZE; i++) 
 	  pSync[i] = _SHMEM_SYNC_VALUE;
 
+
+  // global operation, all processes must call it
   shmem_barrier_all();
+
   shmem_broadcast32(&NumCities, &NumCities, 1, 0, 0, 0, NumProcs, pSync);
   assert(NumCities<=MAXCITIES);
   if(NumCities*NumCities > DIST_MAX_SIZE)
 	  fprintf(stderr, "Increase size of Dist array\n");
 
-  if (mype == 0)
-     for( int i = 0 ; i<NumCities ; i++ )
-        for( int j = 0 ; j<NumCities ; j++ )
-           scanf("%d", &Dist[i*NumCities + j]);
-  
-  // global operation, all processes must call it
   shmem_barrier_all();
   shmem_broadcast32(Dist, Dist, NumCities*NumCities, 0, 0, 0, NumProcs, pSync);
-  
-  if (mype == 0) {       // print the matrix for debugging
-     printf("Number of cities: %d\n", NumCities);
-     for( int i = 0 ; i<NumCities ; i++ ) {
-        for( int j=0 ; j<NumCities ; j++ )
-           printf("%5d", Dist[i*NumCities+j] );
-        printf("\n");
-     }
-  }
 }
 
 
@@ -104,6 +103,7 @@ void Fill_Dist( void )
 int main(int argc, char *argv[])
 {
   shmem_init();
+  input_file = argv[1];
   mype = shmem_my_pe();
   NumProcs = shmem_n_pes();
   shmemx_am_attach(hid_BESTPATH, &handler_master_bestpath);

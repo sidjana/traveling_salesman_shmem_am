@@ -17,12 +17,7 @@ void Worker ()
   
   shmem_barrier_all();
 
-
-  //TODO fix shmem implementation to allow null pointers and empty buffers to be passed
-  // as active messages
-  printf("Worker %d subscribing\n",mype);
-  fflush(stdout);
-  shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, &temp_buf, sizeof(int));
+  shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
   shmemx_am_quiet();
   while (1) {
 
@@ -74,7 +69,7 @@ void Worker ()
         }
         //printf("Worker %d subscribing\n",mype);
         //fflush(stdout);
-        shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, &temp_buf, sizeof(int));
+        shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
 	shmemx_am_quiet();
     } /* end of new path check */
 

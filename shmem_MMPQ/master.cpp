@@ -1,11 +1,18 @@
 #include "list.h"
 #include "tsp.h"
 
+extern "C" {
+        void get_rtc_(unsigned long long int*);
+        void get_rtc_res_(unsigned long long int*);
+}
+
 extern int* waiting;     // to save peids
 extern Msg_t msg_in;
 extern shmemx_am_mutex lock_shortestlen, lock_queue, lock_workers_stack;
 extern int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, NumCities;
 extern volatile int nwait;
+
+unsigned long long int start_time, stop_time, res;
 
 Path Shortest;
 LIST queue;
@@ -26,18 +33,18 @@ handler_master_subscribe(void *temp, size_t nbytes, int req_pe, shmemx_am_token_
 
 
 void 
-handler_master_putpath(void *msg_new, size_t nbytes, int req_pe, shmemx_am_token_t token)
+handler_master_putpath(void *inbuf, size_t nbytes, int req_pe, shmemx_am_token_t token)
 {
-	Msg_t* msg_buf = (Msg_t*) msg_new;
-	Path* P = new Path();
-	P->Set (msg_buf->length, msg_buf->city, msg_buf->visited);
+	Msg_t* msg_buf = (Msg_t*)inbuf;
+	int pathcnt = nbytes/sizeof(Msg_t);
+
 	shmemx_am_mutex_lock(&lock_queue);
-	//printf("AM: mutex queue locked\n");
-	//fflush(stdout);
-	queue.Insert(P, msg_buf->length);
+	for(int i=0;i<pathcnt;i++) {
+	   Path* P = new Path();
+	   P->Set (msg_buf[i].length, msg_buf[i].city, msg_buf[i].visited);
+	   queue.Insert(P, msg_buf[i].length);
+	}
 	shmemx_am_mutex_unlock(&lock_queue);
-	//printf("AM: Received new path from Worker %d\n",req_pe);
-	//fflush(stdout);
 }
 
 
@@ -108,6 +115,7 @@ assign_task()
 	      shmemx_am_mutex_lock(&lock_workers_stack);
 	      if(nwait == NumProcs-1) {
                 shmemx_am_mutex_unlock(&lock_workers_stack);
+	        get_rtc_(&stop_time);
                 announce_done();
                 retval = 1;
 	      } else
@@ -130,11 +138,12 @@ void Master ()
                                // one zero-length path
   Shortest.length = INTMAX;   // The initial Shortest path must be bad
 
+  get_rtc_res_(&res);
   shmem_barrier_all();
   printf("Coord started ...\n"); fflush(stdout);
+  get_rtc_(&start_time);
   while (1) 
   {
-    shmemx_am_poll();
     if(shmem_int_swap(&isshortest,0,mype))  
        update_shortest();
     if(assign_task())
@@ -143,6 +152,8 @@ void Master ()
   shmem_barrier_all();
   printf("Shortest path:\n");
   Shortest.Print();
+  double time = (stop_time - start_time)*1.0/double(res);
+  printf("\n#Time;%20.5f;NumProcs;%d;NumCities;%d\n",time,NumProcs,NumCities);
 }
 
 

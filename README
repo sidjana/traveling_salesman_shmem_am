@@ -1,14 +1,3 @@
 
-** This the OpenSHMEM version of the Traveling Saleman
-Problem. 
-
-This application uses a master-worker
-communication pattern. This version uses the proposed
-active message extensions to OpenSHMEM. The
-documentation for this API is located at
-https://github.com/sidjana/active_msgs_shmem_report.git
-
-** Note:
-The original MPI-C version of the file was taken from
-http://www.eecg.toronto.edu/~amza/ece1747h/homeworks/examples/MPI/
-
+Location of TSP:
+http://www.eecg.toronto.edu/~amza/ece1747h/homeworks/examples/MPI/tsp.h
