@@ -1,6 +1,6 @@
 
 
-CFLAGS =  -O2
+CFLAGS =  -O3
 MPICPP = mpic++ 
 
 .PHONY: clean run build all default
