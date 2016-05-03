@@ -1,3 +1,17 @@
 
 Location of TSP:
-http://www.eecg.toronto.edu/~amza/ece1747h/homeworks/examples/MPI/tsp.h
+http://www.eecg.toronto.edu/~amza/ece1747h/homeworks/examples/MPI
+
+Directory contents:
+.
+├── mpi          Original MPI version located at the link above
+├── shmem_LLPQ   Shmem version with multiple calls by the worker to 
+|                lock & unlock the worker-queue
+├── shmem_MMPQ   Shmem version wherein each worker aggregates multiple 
+|                paths into a single AM request, thereby reducing the 
+|                AM traffic at the master PE
+├── shmem_PPQ    Shmem version that bears the overhead of multiple AM 
+|                requests per worker
+├── support      Timers and input files
+└── tests        Test directory 
+
