@@ -1,6 +1,9 @@
 
-Location of TSP:
+-- Location of the MPI version of the TSP was obtained
+from the following link: 
 http://www.eecg.toronto.edu/~amza/ece1747h/homeworks/examples/MPI
+-- This is currently hosted on Dr. Cristiana Amza's
+website at www.eecg.toronto.edu/~amza
 
 Directory contents:
 .
