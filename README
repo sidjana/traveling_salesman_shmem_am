@@ -8,6 +8,7 @@ website at www.eecg.toronto.edu/~amza
 Directory contents:
 .
 ├── mpi          Original MPI version located at the link above
+├── shmem_pure   Shmem version in accordance to spec v1.2 (w/o AM)
 ├── shmem_LLPQ   Shmem version with multiple calls by the worker to 
 |                lock & unlock the worker-queue
 ├── shmem_MMPQ   Shmem version wherein each worker aggregates multiple 

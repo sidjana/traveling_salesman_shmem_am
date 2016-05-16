@@ -59,6 +59,7 @@ handler_master_putpath()
 		   fflush(stdout);
 	    	   queue.Insert(P, (worker_new_path+i)->length);
 	    	}
+                //printf("Master: Got new paths (cnt:%d), source = %d\n", pathcnt, j);
 		subscribe_pe(j);
 	    }
 	}
@@ -96,7 +97,7 @@ assign_task()
 	int retval = 0;
 	Path* P;
 	Msg_t* msg_buf = new Msg_t;
-	if(nwait>0) {
+	while(nwait>0) {
            if(!queue.IsEmpty()) {
               // get a path and send it along with bestlength
               P = (Path *)queue.Remove(NULL); 
@@ -110,12 +111,14 @@ assign_task()
 	      shmem_quiet();
 	      shmem_int_swap(&isnewpath,1,dest_pe);
 	      shmem_quiet();
-           } else {
+	      //printf("Master sending new path to %d\n",dest_pe);
+           }else {
 	      if(nwait == NumProcs-1) {
 	        get_rtc_(&stop_time);
                 announce_done();
                 retval = 1;
-	      } 
+	      }
+	      break;
 	   }
 	} 
 

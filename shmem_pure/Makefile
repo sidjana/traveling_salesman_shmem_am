@@ -1,6 +1,6 @@
 
 
-CFLAGS =  -g
+CFLAGS =  -O2
 OSHCPP = oshc++ 
 
 .PHONY: clean run build all default

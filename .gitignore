@@ -1,1 +1,3 @@
-tsp.out
+*/*.out
+*/*.outputfile
+*/*.log

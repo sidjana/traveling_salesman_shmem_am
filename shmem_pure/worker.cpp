@@ -13,7 +13,6 @@ extern Msg_t msg_in, worker_shortest_path;
 
 void Worker ()
 { 
-	static int callcnt=0;
   *(best_path_list+MASTER_PE)=INTMAX;
   isdone = 0; isnewpath = 0;
   shmem_int_swap(subscribe_list+mype, 1,MASTER_PE);
@@ -78,11 +77,8 @@ void Worker ()
 	  fflush(stdout);
 	  memset(&msg_in,0,sizeof(Msg_t));
 	  if(pathcnt) {
-		  callcnt++;
 	    shmem_int_swap(put_path_list+mype, pathcnt,MASTER_PE);
 	    subscribed=1; // default subscrition on path return 
-	    if(callcnt>5)
-		    exit(1);
 	  }
         }
 
