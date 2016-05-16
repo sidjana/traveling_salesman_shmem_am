@@ -31,7 +31,7 @@ int *waiting;
 int Dist[DIST_MAX_SIZE]; 
 int newshortestlen, isnewpath, isdone, NumProcs, mype, isshortest, NumCities;
 shmemx_am_mutex lock_shortestlen, lock_queue, lock_workers_stack;
-volatile int nwait;
+volatile int nwait=0;
 long pSync[_SHMEM_BCAST_SYNC_SIZE];
 Msg_t msg_in;
 char* input_file;

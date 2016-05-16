@@ -15,17 +15,17 @@ void Worker ()
   newshortestlen = INTMAX;
   isdone = 0; isnewpath = 0;
   Msg_t outbuf[NumCities];
-  
 
-
+  shmem_barrier_all();
   shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
   shmem_barrier_all();
-  while (1) {
 
+  while (1) {
+    int shortestlen = shmem_int_fadd(&newshortestlen,0,mype);
     if (shmem_int_swap(&isnewpath,0,mype)) { 
 	//printf("Worker %d just received new path\n",mype);
 	//fflush(stdout);
-
+	int subscribed = 0;
     	msg_in.visited++;
 
     	if (msg_in.visited==NumCities) {
@@ -39,8 +39,10 @@ void Worker ()
     	     msg_in.length += d1 + d2;
     	  
     	     // if path is good, send it to master
-    	     if (msg_in.length < newshortestlen) 
+    	     if (msg_in.length < shortestlen) { 
     	        shmemx_am_request(MASTER_PE, hid_BESTPATH, &msg_in, sizeof(Msg_t));
+	        subscribed=1;
+	     }
     	  }
     	  // not a valid path, ask for another partial path
     	}
@@ -64,17 +66,21 @@ void Worker ()
     	    if (int d = Dist[(msg_in.city[msg_in.visited-2])*NumCities +
 			      msg_in.city[msg_in.visited-1] ]) {
     	        msg_in.length = length + d;
-    	        if (msg_in.length < newshortestlen) { 
+    	        if (msg_in.length < shortestlen) { 
 		  memcpy(&outbuf[pathcnt],&msg_in,sizeof(Msg_t));
 		  pathcnt++;
 		}
     	    }
     	  }
-	  if(pathcnt)
+	  if(pathcnt) {
     	    shmemx_am_request(MASTER_PE, hid_PUTPATH, outbuf, pathcnt*sizeof(Msg_t));
+	    subscribed=1;
+	  }
         }
-        shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
-	shmemx_am_quiet();
+	if(subscribed==0) {
+          shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
+	  shmemx_am_quiet();
+	}
     } /* end of new path check */
 
     if (shmem_int_swap(&isdone,0,mype)) { 
