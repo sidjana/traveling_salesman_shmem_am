@@ -24,11 +24,7 @@ handler_master_subscribe(void *temp, size_t nbytes, int req_pe, shmemx_am_token_
 	shmemx_am_mutex_lock(&lock_workers_stack);
 	*(waiting+nwait) = req_pe;
 	nwait++;
-	//printf("AM: worker queue locked\n");
-	//fflush(stdout);
 	shmemx_am_mutex_unlock(&lock_workers_stack);
-	//printf("AM: Worker %d added to work queue\n",req_pe);
-	//fflush(stdout);
 }
 
 
@@ -87,42 +83,48 @@ announce_done()
 inline int 
 assign_task()
 {
-	int retval = 0;
+	int retval = 0, i=-1;
 	Path* P;
 	Msg_t* msg_buf = new Msg_t;
-	shmemx_am_mutex_lock(&lock_workers_stack);
-	if(nwait>0) {
-           shmemx_am_mutex_unlock(&lock_workers_stack);
-           shmemx_am_mutex_lock(&lock_queue);
-           if(!queue.IsEmpty()) {
-              // get a path and send it along with bestlength
-              P = (Path *)queue.Remove(NULL); 
-              shmemx_am_mutex_unlock(&lock_queue);
-              msg_buf->length = P->length;
-              memcpy (msg_buf->city, P->city, MAXCITIES*sizeof(int));
-              msg_buf->visited = P->visited;
-              delete P;
-	      shmemx_am_mutex_lock(&lock_workers_stack);
-	      --nwait;
-	      int dest_pe = *(waiting+nwait);
-	      shmemx_am_mutex_unlock(&lock_workers_stack);
-	      shmem_putmem(&msg_in, msg_buf, sizeof(Msg_t), dest_pe);
-	      shmem_quiet();
-	      shmem_int_swap(&isnewpath,1,dest_pe);
-	      shmem_quiet();
-           } else {
-              shmemx_am_mutex_unlock(&lock_queue);
-	      shmemx_am_mutex_lock(&lock_workers_stack);
-	      if(nwait == NumProcs-1) {
-                shmemx_am_mutex_unlock(&lock_workers_stack);
-	        get_rtc_(&stop_time);
-                announce_done();
-                retval = 1;
-	      } else
-                shmemx_am_mutex_unlock(&lock_workers_stack);
+	Msg_t* temp_msg_buf = (Msg_t*) malloc(NumCities*sizeof(Msg_t));
+	int* temp_dest_pe = (int*) malloc(NumCities*sizeof(int));
+
+	shmemx_am_mutex_lock(&lock_workers_stack); // lock for nwait
+        shmemx_am_mutex_lock(&lock_queue);	   // lock for queue
+        while(nwait>0) {
+	   if(!queue.IsEmpty()) {
+               // get a path and send it along with bestlength
+               P = (Path *)queue.Remove(NULL); 
+               msg_buf->length = P->length;
+               memcpy (msg_buf->city, P->city, MAXCITIES*sizeof(int));
+               msg_buf->visited = P->visited;
+               delete P;
+	       --nwait;
+	       ++i;
+	       memcpy((temp_msg_buf+i),msg_buf,sizeof(Msg_t));
+	       memcpy((temp_dest_pe+i),(waiting+nwait),sizeof(int));
+	   } else if(nwait==NumProcs-1) {
+	       get_rtc_(&stop_time);
+               retval = 1;
+	       break;
 	   }
-	} else
-           shmemx_am_mutex_unlock(&lock_workers_stack);
+	}
+        shmemx_am_mutex_unlock(&lock_queue);
+	shmemx_am_mutex_unlock(&lock_workers_stack);
+
+	while(i>-1) {
+		//printf("Master sending worker %d = (%d,%d)\n",*(temp_dest_pe+i),
+		//		(temp_msg_buf+i)->length,(temp_msg_buf+i)->visited);
+	         shmem_putmem(&msg_in, (temp_msg_buf+i), sizeof(Msg_t), *(temp_dest_pe+i));
+	         shmem_quiet();
+	         shmem_int_swap(&isnewpath,1,*(temp_dest_pe+i));
+	         shmem_quiet();
+		 i--;
+	}
+
+	if(retval) {
+          announce_done();
+	}
 
 	return retval;
 }
@@ -139,6 +141,7 @@ void Master ()
   Shortest.length = INTMAX;   // The initial Shortest path must be bad
 
   get_rtc_res_(&res);
+  isshortest=0;
   shmem_barrier_all();
   printf("Coord started ...\n"); fflush(stdout);
   get_rtc_(&start_time);

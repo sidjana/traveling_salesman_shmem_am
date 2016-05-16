@@ -16,11 +16,10 @@ void Worker ()
   isdone = 0; isnewpath = 0;
   Msg_t outbuf[NumCities];
   
-  shmem_barrier_all();
 
 
   shmemx_am_request(MASTER_PE, hid_SUBSCRIBE, NULL, 0);
-  shmemx_am_quiet();
+  shmem_barrier_all();
   while (1) {
 
     if (shmem_int_swap(&isnewpath,0,mype)) { 
